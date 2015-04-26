@@ -10,6 +10,7 @@ class MLP:
     [Bishop2006] Bishop, Christopher M. Pattern recognition and machine learning. Vol. 1. New York: springer, 2006.
     """
     def __init__(self, n_neurons, activation_function='tanh',
+                 activation_out_function='linear',
                  initialization='ones'):
         self.n_neurons = n_neurons
         self.n_layers = len(n_neurons)-1
@@ -18,6 +19,7 @@ class MLP:
         self.activations = []
         self.zetas = []
         self.deltas = []
+        self.activation_function = activation_function
 
         for i in range(self.n_layers):
             self.weights.append([])
@@ -33,17 +35,34 @@ class MLP:
             self.activation_f = lambda x: x
             self.activation_fdx = lambda x: np.ones(x.shape)
 
+        if activation_out_function == 'tanh':
+            self.activation_out_f = lambda x: np.tanh(x)
+        elif activation_out_function == 'linear':
+            self.activation_out_f = lambda x: x
+
         self.initialize(initialization)
 
     def initialize(self, initialization='ones'):
         if initialization == 'zeros':
             for i in range(self.n_layers):
-                self.weights[i] = np.zeros((self.n_neurons[i], self.n_neurons[i+1]))
+                self.weights[i] = np.zeros((self.n_neurons[i],
+                                            self.n_neurons[i+1]))
                 self.biases[i] = np.zeros((1, self.n_neurons[i+1]))
         elif initialization == 'ones':
             for i in range(self.n_layers):
-                self.weights[i] = np.ones((self.n_neurons[i], self.n_neurons[i+1]))
+                self.weights[i] = np.ones((self.n_neurons[i],
+                                           self.n_neurons[i+1]))
                 self.biases[i] = np.ones((1, self.n_neurons[i+1]))
+        elif initialization == 'rand':
+            for i in range(self.n_layers):
+                if self.activation_function == 'tanh':
+                    hi_limit = 6/np.sqrt(self.n_neurons[i] + self.n_neurons[i+1])
+                else:
+                    hi_limit = 0.5
+                self.weights[i] = np.random.uniform(low=-hi_limit, high=hi_limit,
+                        size=(self.n_neurons[i], self.n_neurons[i+1]))
+                self.biases[i] = np.random.uniform(low=-hi_limit,
+                        high=hi_limit, size=(1, self.n_neurons[i+1]))
 
     def forward(self, x):
         """
@@ -52,9 +71,11 @@ class MLP:
         """
         self.activations[0] = np.dot(x,self.weights[0]) + self.biases[0]
         self.zetas[0] = self.activation_f(self.activations[0])
-        for i in range(1, self.n_layers):
+        for i in range(1, self.n_layers-1):
             self.activations[i] = np.dot(self.zetas[i-1],self.weights[i]) + self.biases[i]
             self.zetas[i] = self.activation_f(self.activations[i])
+        self.activations[-1] = np.dot(self.zetas[-2],self.weights[-1]) + self.biases[-1]
+        self.zetas[-1] = self.activation_out_f(self.activations[-1])
         return self.zetas[-1]
 
     def compute_deltas(self, target):
@@ -117,18 +138,18 @@ class MLP:
         return z_hidden
 
     def output(self, x):
-        [a_hidden, z_hidden, y] = self.forward(x)
-        return y
+        self.forward(x)
+        return self.zetas[-1]
 
     def all_output(self, x):
         return self.forward(x)
 
 def main():
     n_neurons = [2,3,2]
-    x = np.array([[1,2], [1,2]])
-    t = np.array([[2,4], [2,4]])
-    lr = 0.001
-    epochs = 40
+    x = np.array([[1,2], [1,2], [1,2]])
+    t = np.array([[2,4], [2,4], [2,4]])
+    lr = 0.1
+    epochs = 200
 
     activation_function = 'linear'
     initialization='ones'
