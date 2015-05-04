@@ -4,14 +4,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-class MLP:
+class MLP(object):
     """
     Implementation based on the book:
-    [Bishop2006] Bishop, Christopher M. Pattern recognition and machine learning. Vol. 1. New York: springer, 2006.
+    [Bishop2006] Bishop, Christopher M. Pattern recognition and machine
+    learning. Vol. 1. New York: springer, 2006.
     """
     def __init__(self, n_neurons, activation_function='tanh',
                  activation_out_function='linear',
-                 initialization='ones'):
+                 initialization='ones',
+                 error_function='mse'):
         self.n_neurons = n_neurons
         self.n_layers = len(n_neurons)-1
         self.weights = []
@@ -20,6 +22,8 @@ class MLP:
         self.zetas = []
         self.deltas = []
         self.activation_function = activation_function
+        self.activation_out_function = activation_out_function
+        self.error_function = error_function
 
         for i in range(self.n_layers):
             self.weights.append([])
@@ -39,6 +43,17 @@ class MLP:
             self.activation_out_f = lambda x: np.tanh(x)
         elif activation_out_function == 'linear':
             self.activation_out_f = lambda x: x
+        elif activation_out_function == 'softmax':
+            self.activation_out_f = lambda x: np.exp(x)
+
+        if error_function == 'mse':
+            self.error_f = self.mean_squared_error
+        elif error_function == 'ce':
+            self.error_f = self.cross_entropy
+        else:
+            print("error_function {0} unknown, selecting default".format(
+                error_function))
+            self.error_f = self.mean_squared_error
 
         self.initialize(initialization)
 
@@ -56,13 +71,15 @@ class MLP:
         elif initialization == 'rand':
             for i in range(self.n_layers):
                 if self.activation_function == 'tanh':
-                    hi_limit = 6/np.sqrt(self.n_neurons[i] + self.n_neurons[i+1])
+                    limit = 6/np.sqrt(self.n_neurons[i]
+                                         + self.n_neurons[i+1])
                 else:
-                    hi_limit = 0.5
-                self.weights[i] = np.random.uniform(low=-hi_limit, high=hi_limit,
-                        size=(self.n_neurons[i], self.n_neurons[i+1]))
-                self.biases[i] = np.random.uniform(low=-hi_limit,
-                        high=hi_limit, size=(1, self.n_neurons[i+1]))
+                    limit = 0.5
+                self.weights[i] = np.random.uniform(
+                        low=-limit, high=limit, size=(self.n_neurons[i],
+                                                      self.n_neurons[i+1]))
+                self.biases[i] = np.random.uniform(low=-limit,
+                        high=limit, size=(1, self.n_neurons[i+1]))
 
     def forward(self, x):
         """
@@ -72,10 +89,16 @@ class MLP:
         self.activations[0] = np.dot(x,self.weights[0]) + self.biases[0]
         self.zetas[0] = self.activation_f(self.activations[0])
         for i in range(1, self.n_layers-1):
-            self.activations[i] = np.dot(self.zetas[i-1],self.weights[i]) + self.biases[i]
+            self.activations[i] = np.dot(self.zetas[i-1],self.weights[i]) \
+                                  + self.biases[i]
             self.zetas[i] = self.activation_f(self.activations[i])
-        self.activations[-1] = np.dot(self.zetas[-2],self.weights[-1]) + self.biases[-1]
+        self.activations[-1] = np.dot(self.zetas[-2],self.weights[-1]) \
+                               + self.biases[-1]
         self.zetas[-1] = self.activation_out_f(self.activations[-1])
+        if self.activation_out_function == 'softmax':
+            z = np.sum(self.zetas[-1], axis=1)
+            z = np.reshape(z,(-1,1))
+            self.zetas[-1] = np.divide(self.zetas[-1],z)
         return self.zetas[-1]
 
     def compute_deltas(self, target):
@@ -102,7 +125,13 @@ class MLP:
     def error(self, x, t):
         self.forward(x)
         y = self.zetas[-1]
-        return np.sum(np.subtract(y,t)**2)/2
+        return self.error_f(y,t)
+
+    def mean_squared_error(self,y,t):
+        return np.mean(np.subtract(y,t)**2)/2
+
+    def cross_entropy(self,y,t):
+        return -np.mean(np.log(y[t==1]))
 
     def __str__(self):
         return ("ANN architecture\n"
@@ -159,7 +188,8 @@ def main():
     error = np.zeros(epochs)
     for i in range(epochs):
         model.forward(x)
-        print "Forward pass with input {0} gives output {1}".format(x, model.zetas[-1])
+        print "Forward pass with input {0} gives output {1}".format(
+                x, model.zetas[-1])
         model.compute_deltas(t)
         model.update(x,lr)
         print model.weights
